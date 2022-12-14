@@ -1,11 +1,19 @@
+import os
+import asyncio
+import logging
+
 from telethon import TelegramClient
 from telethon import functions, types
-import os
-import logging
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 """Logger"""
 logging.basicConfig(format='[%(levelname) 5s/%(asctime)s] %(name)s: %(message)s',
                     level=logging.WARNING)
+logger = logging.getLogger(__name__)
 
 
 """API ID and hash from my.telegram.org to create a telegram client"""
@@ -14,47 +22,85 @@ api_id = os.environ.get('API_ID')
 api_hash = os.environ.get('API_HASH')
 
 
-# client =  TelegramClient('client', api_id, api_hash)
 
-class Bot:
-    def __init__(self, api_id, api_hash):
-        self.api_id = api_id
-        self.api_hash = api_hash
-        self.client = TelegramClient('session_name', self.api_id, self.api_hash)
-        self.client.start()
-        self.client.run_until_disconnected()  
-        print('Bot is running') 
 
-    """Check and return the channel information"""
-    def get_channel_info(self, username):
-        channel = self.client.get_entity(username)
-        print(channel.stringify())
-        return channel
-    """get media files from a channel"""
+class Bot(TelegramClient):
+    def __init__(self, limit=10, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.limit = limit
+        print("Bot created")
 
-    def get_media(self, username, limit=10):
-        media = self.client.GetFullChannelRequest(
-        channel=username
-    )
-        print('The channel has:', media.message)
-        print(media.stringify())
+
+    """
+    Get media essages from a channel
+    @param channel: channel username
+    @return: list of media messages
+    """
+
+    async def get_media(self, channel):
+        messages = await self.get_messages(channel, limit=self.limit)
+        media = []
+        for message in messages:
+            if message.media:
+                media.append(message.media)
+        logger.info("Found {} files".format(len(media)))
+        print(messages)
         return media
-    """download media files from a channel"""
 
-    def download_media(self, username, limit=10):
-        media = self._get_media(username, limit)
-        for i in media:
-            self.client.download_media(i, file=media)
-            print('Downloaded:', media.message)
-        
+    """
+    Create a file path for a media message
+    @param channel: channel username
+    @param message: media message
+    @return: file path
+    """
+    def create_path(self, channel, message):
+        file_name = message.file.name
+        file_path = os.path.join(channel, file_name)
+        return file_path
 
-def main():
-    bot = Bot(api_id, api_hash)
-    bot._get_media('th_read')
-    bot._download_media('th_read')
-    
+    """
+    Get and download media messages from a channel
+    @param channel: channel username
+    @return: list of downloaded media messages
+    """
+    async def download_files(self, channel):
+        await self.connect()
+        media = await self.get_media(channel)
+        file_paths = []
+        for m in media:
+            file_path = self.create_path(channel, m)
+            await m.download_media(m)
+            file_paths.append(file_path)
+        logger.info("Downloaded {} files".format(len(media)))
+        return media
 
-if __name__ == '__main__':
-    main()
+
+async def main(
+    limit,
+    session_name,
+    api_id,
+    api_hash,
+):
+
+    bot = Bot(
+        limit, session_name, api_id, api_hash
+    )
+    await bot.start()
+    await bot.download_files(channel_name)
+
+
+if __name__ == "__main__":
+
+    try:
+        asyncio.run(
+            main(
+                limit=10,
+                session_name="session_name",
+                api_id=api_id,
+                api_hash=api_hash,
+            )
+        )
+    except KeyboardInterrupt:
+        print("\n STOP EXPORTING")
 
 
