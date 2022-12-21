@@ -42,9 +42,10 @@ class Bot(TelegramClient):
         media = []
         for message in messages:
             if message.media:
-                media.append(message.media)
+                media.append(message)
         logger.info("Found {} files".format(len(media)))
-        print(messages)
+        print("Found {} files".format(len(media)))
+        print(media)
         return media
 
     """
@@ -53,9 +54,11 @@ class Bot(TelegramClient):
     @param message: media message
     @return: file path
     """
-    def create_path(self, channel, message):
-        file_name = message.file.name
-        file_path = os.path.join(channel, file_name)
+    def create_path(self, channel):
+        file_path = os.path.join(channel)
+        if not os.path.exists(file_path):
+            os.makedirs(file_path)
+        
         return file_path
 
     """
@@ -66,11 +69,10 @@ class Bot(TelegramClient):
     async def download_files(self, channel):
         await self.connect()
         media = await self.get_media(channel)
-        file_paths = []
+        file_paths = self.create_path(channel)
+        os.chdir(file_paths)
         for m in media:
-            file_path = self.create_path(channel, m)
-            await m.download_media(m)
-            file_paths.append(file_path)
+            task = asyncio.create_task(m.download_media())
         logger.info("Downloaded {} files".format(len(media)))
         return media
 
@@ -86,7 +88,7 @@ async def main(
         limit, session_name, api_id, api_hash
     )
     await bot.start()
-    await bot.download_files(channel_name)
+    await bot.download_files("th_read")
 
 
 if __name__ == "__main__":
@@ -101,6 +103,6 @@ if __name__ == "__main__":
             )
         )
     except KeyboardInterrupt:
-        print("\n STOP EXPORTING")
+        print("\n STOP DOWNLOAD")
 
 
